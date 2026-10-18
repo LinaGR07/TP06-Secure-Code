@@ -29,16 +29,30 @@ from argon2.exceptions import InvalidHashError, VerificationError
 SECRET_KEY = os.environ.get("SECRET_KEY")
 if not SECRET_KEY:
     raise RuntimeError("The SECRET_KEY environment variable must be set")
+# "production" by default (fail secure): dev-only features must be explicitly enabled
+APP_ENV = os.environ.get("APP_ENV", "production")
+IS_DEV = APP_ENV == "development"
 DB_PATH = os.environ.get("DB_PATH", "shop.db")
 UPLOAD_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "uploads")
 # SSRF protection: the server may only fetch these hosts (allowlist, not denylist)
 ALLOWED_FETCH_HOSTS = {"example.com", "www.python.org"}
 
+
+
 # INFO in production: DEBUG logs are verbose and may expose internal details
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("minishop")
 
-app = FastAPI(title="MiniShop", debug=True)
+# debug=False: no stack traces sent to clients.
+# Swagger UI and the OpenAPI schema map the whole API: only exposed in development.
+app = FastAPI(
+    title="MiniShop",
+    debug=False,
+    docs_url="/docs" if IS_DEV else None,
+    redoc_url="/redoc" if IS_DEV else None,
+    openapi_url="/openapi.json" if IS_DEV else None,
+)
+
 # Session cookie: signed with SECRET_KEY, sent over HTTPS only (Secure), not readable by
 # JavaScript (HttpOnly, default), not sent on cross-site POST requests (SameSite=Lax),
 # and expiring after 1 hour instead of 14 days
@@ -363,4 +377,6 @@ def boom():
 
 if __name__ == "__main__":
     init_db()
-    uvicorn.run("app:app", host="0.0.0.0", port=5000, reload=True)
+    # Local run only: listen on localhost, no auto-reload.
+    # In the container, the Dockerfile starts uvicorn on 0.0.0.0 itself.
+    uvicorn.run("app:app", host="127.0.0.1", port=5000)
