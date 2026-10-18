@@ -180,7 +180,11 @@ def calc(data: dict = Body(...)):
 
 @app.post("/import-yaml")
 async def import_yaml(request: Request):
-    cfg = yaml.load(await request.body(), Loader=yaml.Loader)
+    try:
+        # safe_load only builds plain data (dict, list, str, int...): no Python objects
+        cfg = yaml.safe_load(await request.body())
+    except yaml.YAMLError:
+        return JSONResponse({"error": "invalid YAML"}, status_code=400)
     return {"keys": list(cfg.keys()) if isinstance(cfg, dict) else str(type(cfg))}
 
 
