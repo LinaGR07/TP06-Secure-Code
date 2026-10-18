@@ -24,6 +24,9 @@ from pathlib import Path
 from urllib.parse import urlparse
 from argon2 import PasswordHasher
 from argon2.exceptions import InvalidHashError, VerificationError
+from slowapi import Limiter
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
 
 # Secret used to sign session cookies: read from the environment, never hardcoded.
 # No default value on purpose: the app refuses to start rather than run with a known key.
@@ -37,6 +40,9 @@ DB_PATH = os.environ.get("DB_PATH", "shop.db")
 UPLOAD_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "uploads")
 # SSRF protection: the server may only fetch these hosts (allowlist, not denylist)
 ALLOWED_FETCH_HOSTS = {"example.com", "www.python.org"}
+# Brute force protection on /login. Production default when unset; tests and dev raise it
+# through the environment because they log in many times in a row.
+LOGIN_RATE_LIMIT = os.environ.get("LOGIN_RATE_LIMIT", "5/minute")
 
 # INFO in production: DEBUG logs are verbose and may expose internal details
 logging.basicConfig(level=logging.INFO)
@@ -51,6 +57,20 @@ app = FastAPI(
     redoc_url="/redoc" if IS_DEV else None,
     openapi_url="/openapi.json" if IS_DEV else None,
 )
+
+# Rate limiter: counts requests per client IP address
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+
+
+@app.exception_handler(RateLimitExceeded)
+async def handle_rate_limit(request: Request, exc: RateLimitExceeded):
+    # 429 Too Many Requests, with a hint telling the client when to retry
+    return JSONResponse(
+        {"error": "too many login attempts, try again later"},
+        status_code=429,
+        headers={"Retry-After": "60"},
+    )
 
 # Session cookie: signed with SECRET_KEY, sent over HTTPS only (Secure), not readable by
 # JavaScript (HttpOnly, default), not sent on cross-site POST requests (SameSite=Lax),
@@ -201,6 +221,7 @@ class LoginRequest(BaseModel):
     password: str = Field(..., min_length=1, max_length=128)
 
 @app.post("/login")
+@limiter.limit(LOGIN_RATE_LIMIT)
 def login(request: Request, data: LoginRequest):
     username, password = data.username, data.password
 
