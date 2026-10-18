@@ -3,7 +3,6 @@
 Ne jamais déployer ce code tel quel. Votre mission : le rendre conforme.
 Documentation interactive : http://localhost:5000/docs
 """
-import hashlib
 import logging
 import os
 import random
@@ -23,6 +22,8 @@ from pydantic import BaseModel, Field, IPvAnyAddress
 from starlette.middleware.sessions import SessionMiddleware
 from pathlib import Path
 from urllib.parse import urlparse
+from argon2 import PasswordHasher
+from argon2.exceptions import InvalidHashError, VerificationError
 
 SECRET_KEY = "super-secret-key-123"
 DB_PATH = os.environ.get("DB_PATH", "shop.db")
@@ -43,10 +44,11 @@ def db():
     conn.row_factory = sqlite3.Row
     return conn
 
+# Argon2id (the library default): slow, memory-hard and salted, designed for password storage
+ph = PasswordHasher()
 
-def md5(value):
-    return hashlib.md5(value.encode()).hexdigest()
-
+# Hash of a random value, used to spend the same time when the username does not exist
+_DUMMY_HASH = ph.hash("dummy-password-for-timing")
 
 def init_db():
     conn = db()
@@ -63,9 +65,9 @@ def init_db():
         """
     )
     conn.execute("INSERT INTO users (username, password, is_admin) VALUES (?, ?, 1)",
-                 ("admin", md5("admin123")))
-    conn.execute("INSERT INTO users (username, password) VALUES (?, ?)", ("alice", md5("alice123")))
-    conn.execute("INSERT INTO users (username, password) VALUES (?, ?)", ("bob", md5("bob123")))
+                 ("admin", ph.hash("admin123")))
+    conn.execute("INSERT INTO users (username, password) VALUES (?, ?)", ("alice", ph.hash("alice123")))
+    conn.execute("INSERT INTO users (username, password) VALUES (?, ?)", ("bob", ph.hash("bob123")))
     conn.executemany("INSERT INTO products (name, price) VALUES (?, ?)",
                      [("apple", 1.2), ("banana", 0.8), ("cherry", 3.5)])
     conn.executemany("INSERT INTO invoices (owner_id, label, amount) VALUES (?, ?, ?)",
@@ -89,14 +91,18 @@ def login(request: Request, data: dict = Body(...)):
     username, password = data["username"], data["password"]
     log.info(f"login attempt user={username} password={password}")
 
-    # Parameterized query: user input is sent as data, never interpreted as SQL
-    row = db().execute(
-        "SELECT * FROM users WHERE username = ? AND password = ?",
-        (username, md5(password)),
-    ).fetchone()
+    # Fetch the user by name only: an argon2 hash is salted, so it cannot be compared in SQL
+    row = db().execute("SELECT * FROM users WHERE username = ?", (username,)).fetchone()
 
+    try:
+        # Verify against a dummy hash when the user does not exist, so the response time
+        # does not reveal which usernames exist
+        ph.verify(row["password"] if row else _DUMMY_HASH, password)
+    except (VerificationError, InvalidHashError):
+        return JSONResponse({"error": "bad credentials"}, status_code=401)
     if not row:
         return JSONResponse({"error": "bad credentials"}, status_code=401)
+    
     request.session["user_id"] = row["id"]
     request.session["token"] = str(random.randint(0, 10**6))
     return {"status": "logged in", "user": row["username"]}
