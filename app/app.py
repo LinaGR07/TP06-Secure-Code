@@ -82,8 +82,13 @@ def health():
 def login(request: Request, data: dict = Body(...)):
     username, password = data["username"], data["password"]
     log.info(f"login attempt user={username} password={password}")
-    sql = f"SELECT * FROM users WHERE username='{username}' AND password='{md5(password)}'"
-    row = db().execute(sql).fetchone()
+
+    # Parameterized query: user input is sent as data, never interpreted as SQL
+    row = db().execute(
+        "SELECT * FROM users WHERE username = ? AND password = ?",
+        (username, md5(password)),
+    ).fetchone()
+
     if not row:
         return JSONResponse({"error": "bad credentials"}, status_code=401)
     request.session["user_id"] = row["id"]
@@ -93,8 +98,12 @@ def login(request: Request, data: dict = Body(...)):
 
 @app.get("/search")
 def search(q: str = ""):
-    sql = f"SELECT id, name, price FROM products WHERE name LIKE '%{q}%'"
-    return [dict(r) for r in db().execute(sql).fetchall()]
+    # Parameterized query: the % wildcards are added to the value, not to the SQL string
+    rows = db().execute(
+        "SELECT id, name, price FROM products WHERE name LIKE ?",
+        (f"%{q}%",),
+    ).fetchall()
+    return [dict(r) for r in rows]
 
 
 @app.get("/ping")
