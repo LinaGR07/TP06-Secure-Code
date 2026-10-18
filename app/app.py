@@ -12,6 +12,7 @@ import subprocess
 import traceback
 import ast
 import operator
+import html
 
 import requests
 import uvicorn
@@ -125,7 +126,8 @@ def ping(host: IPvAnyAddress = "127.0.0.1"):
 
 @app.get("/hello")
 def hello(name: str = ""):
-    return HTMLResponse(f"<h1>Bonjour {name}</h1>")
+    # Escape HTML special characters (< > & " ') so the input is displayed as text, never run as code
+    return HTMLResponse(f"<h1>Bonjour {html.escape(name)}</h1>")
 
 
 @app.get("/files/{name:path}")
