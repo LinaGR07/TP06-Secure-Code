@@ -1,0 +1,20 @@
+# Dependabot opens a pull request when a dependency has an update or a security fix.
+version: 2
+updates:
+  # Python packages listed in app/requirements.txt
+  - package-ecosystem: pip
+    directory: /app
+    schedule:
+      interval: weekly
+
+  # Base image in app/Dockerfile
+  - package-ecosystem: docker
+    directory: /app
+    schedule:
+      interval: weekly
+
+  # GitHub Actions used in the workflows (keeps pinned SHAs up to date)
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
