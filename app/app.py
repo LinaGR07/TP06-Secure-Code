@@ -15,7 +15,7 @@ import html
 import requests
 import uvicorn
 import yaml
-from fastapi import Body, Depends, FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse
 from fastapi.exceptions import RequestValidationError
 from pydantic import BaseModel, ConfigDict, Field, IPvAnyAddress
@@ -192,10 +192,17 @@ async def handle_validation_error(request: Request, exc: RequestValidationError)
 def health():
     return {"status": "ok"}
 
+class LoginRequest(BaseModel):
+    """Strict login payload: two non-empty strings, nothing else."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    username: str = Field(..., min_length=1, max_length=50)
+    password: str = Field(..., min_length=1, max_length=128)
 
 @app.post("/login")
-def login(request: Request, data: dict = Body(...)):
-    username, password = data["username"], data["password"]
+def login(request: Request, data: LoginRequest):
+    username, password = data.username, data.password
 
     # Never log secrets. %r escapes newlines, so a crafted username cannot forge fake log lines.
     log.info("login attempt user=%r", username)
@@ -291,14 +298,17 @@ def safe_eval(expr: str):
     # Parse only (nothing is executed), then walk the tree ourselves
     return _eval(ast.parse(expr, mode="eval").body)
 
+class CalcRequest(BaseModel):
+    """Strict calc payload: one string of at most 100 characters."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    expr: str = Field(..., min_length=1, max_length=100)
+
 @app.post("/calc")
-def calc(data: dict = Body(...)):
-    expr = data.get("expr")
-    # Reject non-string or overly long input before parsing it
-    if not isinstance(expr, str) or len(expr) > 100:
-        return JSONResponse({"error": "invalid expression"}, status_code=400)
+def calc(data: CalcRequest):
     try:
-        result = safe_eval(expr)
+        result = safe_eval(data.expr)
     except (ValueError, SyntaxError, ZeroDivisionError, OverflowError):
         return JSONResponse({"error": "invalid expression"}, status_code=400)
     return {"result": str(result)}
