@@ -14,8 +14,6 @@ on:
 # Least privilege: the GITHUB_TOKEN can only read the repository.
 permissions:
   contents: read
-  pull-requests: read
-
 
 # Cancel an older run of the same branch when a new commit is pushed.
 concurrency:
@@ -49,6 +47,11 @@ jobs:
   # Secret scanning over the git history.
   gitleaks:
     runs-on: ubuntu-latest
+    # Job-level permissions replace the workflow-level ones: contents must be listed again.
+    # On pull_request events, gitleaks-action lists the PR commits through the GitHub API.
+    permissions:
+      contents: read
+      pull-requests: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -59,8 +62,9 @@ jobs:
 
   # Trivy: vulnerabilities, secrets and misconfigurations in the repository,
   # then in the built container image.
-  # trivy-action v0.35.0 is the release that was NOT hijacked in the
-  # March 2026 supply chain attack (GHSA-69fq-xp46-6x23).
+  # trivy-action is pinned by commit SHA (v0.36.0, an immutable release checked before
+  # merging the Dependabot PR). Tags were hijacked in the March 2026 supply chain attack
+  # (GHSA-69fq-xp46-6x23): a SHA cannot be rewritten.
   trivy:
     runs-on: ubuntu-latest
     steps:
