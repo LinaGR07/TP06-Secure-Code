@@ -50,6 +50,33 @@ app.add_middleware(
     max_age=3600,
 )
 
+# Security headers sent with every response (defense in depth on the browser side)
+SECURITY_HEADERS = {
+    # The API only returns JSON and plain HTML: no script, style or frame is ever allowed
+    "Content-Security-Policy": "default-src 'none'; frame-ancestors 'none'; base-uri 'none'",
+    # Do not guess the content type: trust the Content-Type header
+    "X-Content-Type-Options": "nosniff",
+    # HTTPS only for one year (ignored by browsers over plain HTTP)
+    "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
+    # Never display the site inside a frame (clickjacking)
+    "X-Frame-Options": "DENY",
+    # Do not leak our URLs to other sites
+    "Referrer-Policy": "no-referrer",
+}
+
+# Swagger UI loads scripts from a CDN: the strict CSP would break it.
+# These pages are disabled in production anyway.
+_DOCS_PATHS = {"/docs", "/docs/oauth2-redirect", "/redoc", "/openapi.json"}
+
+
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    response = await call_next(request)
+    for name, value in SECURITY_HEADERS.items():
+        if name == "Content-Security-Policy" and request.url.path in _DOCS_PATHS:
+            continue
+        response.headers[name] = value
+    return response
 
 def db():
     conn = sqlite3.connect(DB_PATH)
