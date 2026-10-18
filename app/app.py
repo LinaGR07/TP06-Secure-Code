@@ -25,7 +25,11 @@ from urllib.parse import urlparse
 from argon2 import PasswordHasher
 from argon2.exceptions import InvalidHashError, VerificationError
 
-SECRET_KEY = "super-secret-key-123"
+# Secret used to sign session cookies: read from the environment, never hardcoded.
+# No default value on purpose: the app refuses to start rather than run with a known key.
+SECRET_KEY = os.environ.get("SECRET_KEY")
+if not SECRET_KEY:
+    raise RuntimeError("The SECRET_KEY environment variable must be set")
 DB_PATH = os.environ.get("DB_PATH", "shop.db")
 UPLOAD_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "uploads")
 # SSRF protection: the server may only fetch these hosts (allowlist, not denylist)
