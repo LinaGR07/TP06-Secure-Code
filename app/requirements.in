@@ -1,0 +1,10 @@
+# Direct dependencies of MiniShop.
+# Do not edit requirements.txt by hand: regenerate it with
+#   pip-compile --generate-hashes --strip-extras requirements.in
+fastapi
+uvicorn
+itsdangerous
+httpx
+requests
+PyYAML
+argon2-cffi

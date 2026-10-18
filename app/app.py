@@ -17,7 +17,8 @@ import uvicorn
 import yaml
 from fastapi import Body, Depends, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse
-from pydantic import BaseModel, Field, IPvAnyAddress
+from fastapi.exceptions import RequestValidationError
+from pydantic import BaseModel, ConfigDict, Field, IPvAnyAddress
 from starlette.middleware.sessions import SessionMiddleware
 from pathlib import Path
 from urllib.parse import urlparse
@@ -180,6 +181,12 @@ async def handle_error(request: Request, exc: Exception):
         status_code=500,
     )
 
+@app.exception_handler(RequestValidationError)
+async def handle_validation_error(request: Request, exc: RequestValidationError):
+    # Pydantic v2 echoes the rejected value ("input") in its error details:
+    # never reflect user input back. Only the field location and the reason are returned.
+    errors = [{"loc": list(e.get("loc", ())), "msg": e.get("msg", "")} for e in exc.errors()]
+    return JSONResponse({"error": "invalid request", "details": errors}, status_code=422)
 
 @app.get("/health")
 def health():
@@ -314,8 +321,7 @@ class Profile(BaseModel):
     email: str | None = Field(None, max_length=254)
     bio: str = Field("", max_length=500)
 
-    class Config:
-        extra = "forbid"  # unknown fields are rejected
+    model_config = ConfigDict(extra="forbid")  # unknown fields are rejected
 
 
 @app.post("/import-profile")
