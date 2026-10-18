@@ -12,6 +12,8 @@ _tmp = tempfile.mkdtemp()
 os.environ["DB_PATH"] = os.path.join(_tmp, "test.db")
 # Variable que l'application corrigée est censée lire (adaptez si besoin)
 os.environ.setdefault("SECRET_KEY", "test-only-secret-not-for-prod")
+# The test suite logs in many times in a row: raise the brute force limit for tests only
+os.environ.setdefault("LOGIN_RATE_LIMIT", "100/minute")
 
 import app as shop  # noqa: E402
 
