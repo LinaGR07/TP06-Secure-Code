@@ -1,0 +1,4 @@
+# AWS documentation example key (AKIAIOSFODNN7EXAMPLE) from the initial vulnerable
+# version of app.py. It grants no access and was removed in "fix(secrets): remove
+# hardcoded AWS key". Kept in history on purpose: rewriting it would require a force push.
+d1b44ddc28464a066af14ff3b05482ece6733ce2:app/app.py:aws-access-token:26
