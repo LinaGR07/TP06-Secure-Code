@@ -4,7 +4,7 @@
 fastapi
 uvicorn
 itsdangerous
-httpx
+httpx2
 requests
 PyYAML
 argon2-cffi
