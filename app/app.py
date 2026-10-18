@@ -12,6 +12,8 @@ import random
 import sqlite3
 import subprocess
 import traceback
+import ast
+import operator
 
 import requests
 import uvicorn
@@ -122,7 +124,6 @@ def ping(host: IPvAnyAddress = "127.0.0.1"):
         return JSONResponse({"error": "ping timed out"}, status_code=504)
     return PlainTextResponse(out.stdout + out.stderr)
 
-
 @app.get("/hello")
 def hello(name: str = ""):
     return HTMLResponse(f"<h1>Bonjour {name}</h1>")
@@ -132,10 +133,49 @@ def hello(name: str = ""):
 def get_file(name: str):
     return FileResponse(os.path.join(UPLOAD_DIR, name))
 
+# Whitelist of allowed arithmetic operators. ** is excluded on purpose (9**9**9 = DoS).
+_CALC_OPERATORS = {
+    ast.Add: operator.add,
+    ast.Sub: operator.sub,
+    ast.Mult: operator.mul,
+    ast.Div: operator.truediv,
+    ast.FloorDiv: operator.floordiv,
+    ast.Mod: operator.mod,
+    ast.USub: operator.neg,
+    ast.UAdd: operator.pos,
+}
+
+
+def safe_eval(expr: str):
+    """Evaluate a pure arithmetic expression. Anything else raises ValueError."""
+
+    def _eval(node):
+        # Numbers only (bool is excluded: True is an int subclass)
+        if isinstance(node, ast.Constant) and type(node.value) in (int, float):
+            return node.value
+        # Binary operation: 2 + 3
+        if isinstance(node, ast.BinOp) and type(node.op) in _CALC_OPERATORS:
+            return _CALC_OPERATORS[type(node.op)](_eval(node.left), _eval(node.right))
+        # Unary operation: -5
+        if isinstance(node, ast.UnaryOp) and type(node.op) in _CALC_OPERATORS:
+            return _CALC_OPERATORS[type(node.op)](_eval(node.operand))
+        # Function calls, names, attributes, strings... are all rejected
+        raise ValueError("forbidden expression")
+
+    # Parse only (nothing is executed), then walk the tree ourselves
+    return _eval(ast.parse(expr, mode="eval").body)
 
 @app.post("/calc")
 def calc(data: dict = Body(...)):
-    return {"result": str(eval(data["expr"]))}
+    expr = data.get("expr")
+    # Reject non-string or overly long input before parsing it
+    if not isinstance(expr, str) or len(expr) > 100:
+        return JSONResponse({"error": "invalid expression"}, status_code=400)
+    try:
+        result = safe_eval(expr)
+    except (ValueError, SyntaxError, ZeroDivisionError, OverflowError):
+        return JSONResponse({"error": "invalid expression"}, status_code=400)
+    return {"result": str(result)}
 
 
 @app.post("/import-yaml")
