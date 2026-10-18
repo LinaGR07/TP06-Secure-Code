@@ -34,7 +34,8 @@ UPLOAD_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "uploads")
 # SSRF protection: the server may only fetch these hosts (allowlist, not denylist)
 ALLOWED_FETCH_HOSTS = {"example.com", "www.python.org"}
 
-logging.basicConfig(level=logging.DEBUG)
+# INFO in production: DEBUG logs are verbose and may expose internal details
+logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("minishop")
 
 app = FastAPI(title="MiniShop", debug=True)
@@ -100,7 +101,9 @@ def health():
 @app.post("/login")
 def login(request: Request, data: dict = Body(...)):
     username, password = data["username"], data["password"]
-    log.info(f"login attempt user={username} password={password}")
+    
+    # Never log secrets. %r escapes newlines, so a crafted username cannot forge fake log lines.
+    log.info("login attempt user=%r", username)
 
     # Fetch the user by name only: an argon2 hash is salted, so it cannot be compared in SQL
     row = db().execute("SELECT * FROM users WHERE username = ?", (username,)).fetchone()
