@@ -3,11 +3,9 @@
 Ne jamais déployer ce code tel quel. Votre mission : le rendre conforme.
 Documentation interactive : http://localhost:5000/docs
 """
-import base64
 import hashlib
 import logging
 import os
-import pickle
 import random
 import sqlite3
 import subprocess
@@ -20,7 +18,7 @@ import uvicorn
 import yaml
 from fastapi import Body, FastAPI, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse
-from pydantic import IPvAnyAddress
+from pydantic import BaseModel, Field, IPvAnyAddress
 from starlette.middleware.sessions import SessionMiddleware
 
 SECRET_KEY = "super-secret-key-123"
@@ -188,10 +186,22 @@ async def import_yaml(request: Request):
     return {"keys": list(cfg.keys()) if isinstance(cfg, dict) else str(type(cfg))}
 
 
+class Profile(BaseModel):
+    """Expected shape of an imported profile: plain data only, strictly validated."""
+
+    username: str = Field(..., min_length=1, max_length=50)
+    email: str | None = Field(None, max_length=254)
+    bio: str = Field("", max_length=500)
+
+    class Config:
+        extra = "forbid"  # unknown fields are rejected
+
+
 @app.post("/import-profile")
-async def import_profile(request: Request):
-    profile = pickle.loads(base64.b64decode(await request.body()))
-    return {"profile": str(profile)}
+def import_profile(profile: Profile):
+    # The body is parsed as JSON and validated by pydantic: invalid input gets a 422.
+    # Unlike pickle, JSON can only describe data, it can never trigger code execution.
+    return {"profile": profile}
 
 
 @app.get("/fetch")
