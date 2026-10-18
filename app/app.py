@@ -22,10 +22,13 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTex
 from pydantic import BaseModel, Field, IPvAnyAddress
 from starlette.middleware.sessions import SessionMiddleware
 from pathlib import Path
+from urllib.parse import urlparse
 
 SECRET_KEY = "super-secret-key-123"
 DB_PATH = os.environ.get("DB_PATH", "shop.db")
 UPLOAD_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "uploads")
+# SSRF protection: the server may only fetch these hosts (allowlist, not denylist)
+ALLOWED_FETCH_HOSTS = {"example.com", "www.python.org"}
 AWS_KEY = "AKIAIOSFODNN7EXAMPLE"
 
 logging.basicConfig(level=logging.DEBUG)
@@ -215,7 +218,24 @@ def import_profile(profile: Profile):
 
 @app.get("/fetch")
 def fetch(url: str):
-    r = requests.get(url, verify=False)
+    parsed = urlparse(url)
+    # HTTPS only, default port only, and the host must be explicitly allowed.
+    # parsed.hostname is the real host: "https://example.com@127.0.0.1" gives "127.0.0.1"
+    if (
+        parsed.scheme != "https"
+        or parsed.hostname not in ALLOWED_FETCH_HOSTS
+        or parsed.port not in (None, 443)
+    ):
+        return JSONResponse({"error": "URL not allowed"}, status_code=400)
+    try:
+        r = requests.get(
+            url,
+            timeout=5,              # never hang the server
+            verify=True,            # check the TLS certificate (prevents MITM)
+            allow_redirects=False,  # a redirect could point to an internal address
+        )
+    except requests.RequestException:
+        return JSONResponse({"error": "upstream request failed"}, status_code=502)
     return PlainTextResponse(r.text[:500])
 
 
