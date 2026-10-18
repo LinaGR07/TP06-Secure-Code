@@ -20,6 +20,7 @@ from fastapi import Body, FastAPI, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse
 from pydantic import BaseModel, Field, IPvAnyAddress
 from starlette.middleware.sessions import SessionMiddleware
+from pathlib import Path
 
 SECRET_KEY = "super-secret-key-123"
 DB_PATH = os.environ.get("DB_PATH", "shop.db")
@@ -129,7 +130,13 @@ def hello(name: str = ""):
 
 @app.get("/files/{name:path}")
 def get_file(name: str):
-    return FileResponse(os.path.join(UPLOAD_DIR, name))
+    base = Path(UPLOAD_DIR).resolve()
+    # resolve() computes the real absolute path: "..", absolute paths and symlinks are all resolved
+    target = (base / name).resolve()
+    # The real path must stay inside uploads/, and must be an existing regular file
+    if not target.is_relative_to(base) or not target.is_file():
+        return JSONResponse({"error": "file not found"}, status_code=404)
+    return FileResponse(target)
 
 # Whitelist of allowed arithmetic operators. ** is excluded on purpose (9**9**9 = DoS).
 _CALC_OPERATORS = {
