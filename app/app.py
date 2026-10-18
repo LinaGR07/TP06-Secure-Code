@@ -7,7 +7,7 @@ import logging
 import os
 import sqlite3
 import subprocess
-import traceback
+import secrets
 import ast
 import operator
 import html
@@ -36,8 +36,6 @@ DB_PATH = os.environ.get("DB_PATH", "shop.db")
 UPLOAD_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "uploads")
 # SSRF protection: the server may only fetch these hosts (allowlist, not denylist)
 ALLOWED_FETCH_HOSTS = {"example.com", "www.python.org"}
-
-
 
 # INFO in production: DEBUG logs are verbose and may expose internal details
 logging.basicConfig(level=logging.INFO)
@@ -169,7 +167,18 @@ def init_db():
 
 @app.exception_handler(Exception)
 async def handle_error(request: Request, exc: Exception):
-    return HTMLResponse("<pre>" + traceback.format_exc() + "</pre>", status_code=500)
+    # Full details (stack trace) go to the server logs only, never to the client.
+    # The random error_id lets a user report the error and a developer find it in the logs.
+    error_id = secrets.token_hex(8)
+    log.error(
+        "unhandled error id=%s on %s %s",
+        error_id, request.method, request.url.path,
+        exc_info=exc,
+    )
+    return JSONResponse(
+        {"error": "internal server error", "error_id": error_id},
+        status_code=500,
+    )
 
 
 @app.get("/health")
