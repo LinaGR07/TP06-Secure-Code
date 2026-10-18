@@ -42,10 +42,7 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install pip-audit
-      # The lockfile has hashes, so pip runs in --require-hashes mode:
-      # it cannot be mixed with unhashed packages in the same command.
-      - run: pip install --require-hashes -r app/requirements.txt
-      - run: pip install pytest
+      - run: pip-audit -r app/requirements.txt
 
   # Secret scanning over the git history.
   gitleaks:
@@ -101,7 +98,10 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
-      - run: pip install -r app/requirements.txt pytest
+      # The lockfile has hashes, so pip runs in --require-hashes mode:
+      # it cannot be mixed with unhashed packages in the same command.
+      - run: pip install --require-hashes -r app/requirements.txt
+      - run: pip install pytest
       - run: pytest -q tests
 
   # SBOM: inventory of every dependency (CycloneDX format), kept as an artifact.
