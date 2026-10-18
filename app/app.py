@@ -74,6 +74,26 @@ def current_user(request: Request) -> dict:
         raise HTTPException(status_code=401, detail="login required")
     return dict(row)
 
+# Role-based access control: every permission of every role is defined here, and only here.
+# Deny by default: any permission that is not explicitly listed is refused.
+ROLE_PERMISSIONS = {
+    "admin": {"user:list", "user:delete"},
+    "user": set(),
+}
+
+
+def require(permission: str):
+    """Build a dependency that only lets through users whose role grants `permission`."""
+
+    def checker(user: dict = Depends(current_user)) -> dict:
+        role = "admin" if user["is_admin"] else "user"
+        # .get(role, set()): an unknown role gets no permission at all
+        if permission not in ROLE_PERMISSIONS.get(role, set()):
+            raise HTTPException(status_code=403, detail="forbidden")
+        return user
+
+    return checker
+
 # Argon2id (the library default): slow, memory-hard and salted, designed for password storage
 ph = PasswordHasher()
 
@@ -291,20 +311,21 @@ def invoice(invoice_id: int, user: dict = Depends(current_user)):
     return dict(row)
 
 @app.get("/admin/users")
-def admin_users(request: Request):
-    if "user_id" not in request.session:
-        return JSONResponse({"error": "login required"}, status_code=401)
+def admin_users(user: dict = Depends(require("user:list"))):
     rows = db().execute("SELECT id, username, is_admin FROM users").fetchall()
     return [dict(r) for r in rows]
 
 
 @app.delete("/users/{user_id}")
-def delete_user(user_id: int, request: Request):
-    if "user_id" not in request.session:
-        return JSONResponse({"error": "login required"}, status_code=401)
+def delete_user(user_id: int, user: dict = Depends(require("user:delete"))):
+    # An admin cannot delete their own account: avoids locking everyone out of the admin area
+    if user_id == user["id"]:
+        return JSONResponse({"error": "cannot delete your own account"}, status_code=400)
     conn = db()
-    conn.execute("DELETE FROM users WHERE id = ?", (user_id,))
+    cursor = conn.execute("DELETE FROM users WHERE id = ?", (user_id,))
     conn.commit()
+    if cursor.rowcount == 0:
+        return JSONResponse({"error": "not found"}, status_code=404)
     return {"deleted": user_id}
 
 
