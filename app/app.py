@@ -18,6 +18,7 @@ import uvicorn
 import yaml
 from fastapi import Body, FastAPI, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse
+from pydantic import IPvAnyAddress
 from starlette.middleware.sessions import SessionMiddleware
 
 SECRET_KEY = "super-secret-key-123"
@@ -107,8 +108,18 @@ def search(q: str = ""):
 
 
 @app.get("/ping")
-def ping(host: str = "127.0.0.1"):
-    out = subprocess.run(f"ping -c 1 {host}", shell=True, capture_output=True, text=True)
+def ping(host: IPvAnyAddress = "127.0.0.1"):
+    # host is validated by pydantic: anything that is not an IPv4/IPv6 address gets a 422
+    try:
+        # No shell: arguments are passed as a list, so ; | & $() are never interpreted
+        out = subprocess.run(
+            ["ping", "-c", "1", "-W", "2", str(host)],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except subprocess.TimeoutExpired:
+        return JSONResponse({"error": "ping timed out"}, status_code=504)
     return PlainTextResponse(out.stdout + out.stderr)
 
 
