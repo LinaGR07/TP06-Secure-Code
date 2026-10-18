@@ -5,7 +5,6 @@ Documentation interactive : http://localhost:5000/docs
 """
 import logging
 import os
-import random
 import sqlite3
 import subprocess
 import traceback
@@ -105,9 +104,10 @@ def login(request: Request, data: dict = Body(...)):
         return JSONResponse({"error": "bad credentials"}, status_code=401)
     if not row:
         return JSONResponse({"error": "bad credentials"}, status_code=401)
-    
+
+    # Start a fresh session at login (prevents session fixation)
+    request.session.clear()
     request.session["user_id"] = row["id"]
-    request.session["token"] = str(random.randint(0, 10**6))
     return {"status": "logged in", "user": row["username"]}
 
 
