@@ -34,7 +34,6 @@ DB_PATH = os.environ.get("DB_PATH", "shop.db")
 UPLOAD_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "uploads")
 # SSRF protection: the server may only fetch these hosts (allowlist, not denylist)
 ALLOWED_FETCH_HOSTS = {"example.com", "www.python.org"}
-AWS_KEY = "AKIAIOSFODNN7EXAMPLE"
 
 logging.basicConfig(level=logging.DEBUG)
 log = logging.getLogger("minishop")
