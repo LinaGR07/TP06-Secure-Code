@@ -38,7 +38,16 @@ logging.basicConfig(level=logging.DEBUG)
 log = logging.getLogger("minishop")
 
 app = FastAPI(title="MiniShop", debug=True)
-app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY)
+# Session cookie: signed with SECRET_KEY, sent over HTTPS only (Secure), not readable by
+# JavaScript (HttpOnly, default), not sent on cross-site POST requests (SameSite=Lax),
+# and expiring after 1 hour instead of 14 days
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=SECRET_KEY,
+    https_only=True,
+    same_site="lax",
+    max_age=3600,
+)
 
 
 def db():
