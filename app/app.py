@@ -15,7 +15,7 @@ import html
 import requests
 import uvicorn
 import yaml
-from fastapi import Body, FastAPI, Request
+from fastapi import Body, Depends, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse
 from pydantic import BaseModel, Field, IPvAnyAddress
 from starlette.middleware.sessions import SessionMiddleware
@@ -55,6 +55,24 @@ def db():
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
+
+def current_user(request: Request) -> dict:
+    """Return the logged-in user, or stop the request with a 401.
+
+    Used as Depends(current_user): authentication is checked in one single place
+    instead of being copy-pasted (and possibly forgotten) in every endpoint.
+    """
+    user_id = request.session.get("user_id")
+    if user_id is None:
+        raise HTTPException(status_code=401, detail="login required")
+    # Reload the user from the database: a deleted account must lose access immediately
+    row = db().execute(
+        "SELECT id, username, is_admin FROM users WHERE id = ?", (user_id,)
+    ).fetchone()
+    if row is None:
+        request.session.clear()
+        raise HTTPException(status_code=401, detail="login required")
+    return dict(row)
 
 # Argon2id (the library default): slow, memory-hard and salted, designed for password storage
 ph = PasswordHasher()
@@ -101,7 +119,7 @@ def health():
 @app.post("/login")
 def login(request: Request, data: dict = Body(...)):
     username, password = data["username"], data["password"]
-    
+
     # Never log secrets. %r escapes newlines, so a crafted username cannot forge fake log lines.
     log.info("login attempt user=%r", username)
 
@@ -261,14 +279,16 @@ def fetch(url: str):
 
 
 @app.get("/invoices/{invoice_id}")
-def invoice(invoice_id: int, request: Request):
-    if "user_id" not in request.session:
-        return JSONResponse({"error": "login required"}, status_code=401)
-    row = db().execute("SELECT * FROM invoices WHERE id = ?", (invoice_id,)).fetchone()
+def invoice(invoice_id: int, user: dict = Depends(current_user)):
+    # Ownership is checked in the query itself: another user's invoice is simply not found.
+    # 404 (not 403) so an attacker cannot tell "exists but not yours" from "does not exist".
+    row = db().execute(
+        "SELECT * FROM invoices WHERE id = ? AND owner_id = ?",
+        (invoice_id, user["id"]),
+    ).fetchone()
     if not row:
         return JSONResponse({"error": "not found"}, status_code=404)
     return dict(row)
-
 
 @app.get("/admin/users")
 def admin_users(request: Request):
