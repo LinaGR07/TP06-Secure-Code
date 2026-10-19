@@ -262,7 +262,11 @@ def search(q: str = ""):
 
 
 @app.get("/ping")
-def ping(host: IPvAnyAddress = "127.0.0.1"):
+def ping(host: IPvAnyAddress):
+    # Only public addresses are allowed: loopback, private, link-local (cloud metadata)
+    # and reserved ranges are refused, so /ping cannot be used to map the internal network.
+    if not host.is_global:
+        return JSONResponse({"error": "address not allowed"}, status_code=400)
     # host is validated by pydantic: anything that is not an IPv4/IPv6 address gets a 422
     try:
         # No shell: arguments are passed as a list, so ; | & $() are never interpreted
@@ -423,6 +427,8 @@ def delete_user(user_id: int, user: dict = Depends(require("user:delete"))):
 
 @app.get("/boom")
 def boom():
+    # Deliberately broken route, used by the tests to check that errors return
+    # a generic 500 without any stack trace. Kept on purpose.
     return 1 / 0
 
 
