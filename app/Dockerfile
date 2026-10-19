@@ -23,11 +23,9 @@ RUN pip install --require-hashes --no-cache-dir -r requirements.txt
 COPY . .
 
 # Unprivileged user; only the data directory is writable by it.
-# The demo database is seeded at build time (the key below exists only for this step).
 RUN groupadd --system app \
     && useradd --system --gid app --no-create-home app \
     && mkdir -p /app/data \
-    && SECRET_KEY=build-only python -c "import app; app.init_db()" \
     && chown -R app:app /app/data
 USER app
 
@@ -36,5 +34,7 @@ EXPOSE 5000
 HEALTHCHECK --interval=30s --timeout=3s \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5000/health')" || exit 1
 
+# The demo database is seeded at startup with ADMIN_PASSWORD, given at run time
+# (docker run --env-file .env): no password is ever baked into the image.
 # 0.0.0.0 is required inside a container; no --reload
-CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "5000"]
+CMD ["sh", "-c", "python -c 'import app; app.init_db()' && exec uvicorn app:app --host 0.0.0.0 --port 5000"]

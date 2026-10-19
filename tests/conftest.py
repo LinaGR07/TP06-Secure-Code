@@ -14,6 +14,9 @@ os.environ["DB_PATH"] = os.path.join(_tmp, "test.db")
 os.environ.setdefault("SECRET_KEY", "test-only-secret-not-for-prod")
 # The test suite logs in many times in a row: raise the brute force limit for tests only
 os.environ.setdefault("LOGIN_RATE_LIMIT", "100/minute")
+# The tests log in as admin with this exact password: always force it for the test
+# database, whatever ADMIN_PASSWORD the developer has in their own environment
+os.environ["ADMIN_PASSWORD"] = "admin123"
 
 import app as shop  # noqa: E402
 

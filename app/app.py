@@ -43,6 +43,9 @@ ALLOWED_FETCH_HOSTS = {"example.com", "www.python.org"}
 # Brute force protection on /login. Production default when unset; tests and dev raise it
 # through the environment because they log in many times in a row.
 LOGIN_RATE_LIMIT = os.environ.get("LOGIN_RATE_LIMIT", "5/minute")
+# Password of the seeded admin account: read from the environment, never hardcoded.
+# Only needed when the database is initialised (init_db), not to import the app.
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD")
 
 # INFO in production: DEBUG logs are verbose and may expose internal details
 logging.basicConfig(level=logging.INFO)
@@ -161,6 +164,8 @@ ph = PasswordHasher()
 _DUMMY_HASH = ph.hash("dummy-password-for-timing")
 
 def init_db():
+    if not ADMIN_PASSWORD:
+        raise RuntimeError("The ADMIN_PASSWORD environment variable must be set to seed the database")
     conn = db()
     conn.executescript(
         """
@@ -175,7 +180,7 @@ def init_db():
         """
     )
     conn.execute("INSERT INTO users (username, password, is_admin) VALUES (?, ?, 1)",
-                 ("admin", ph.hash("admin123")))
+                    ("admin", ph.hash(ADMIN_PASSWORD)))
     conn.execute("INSERT INTO users (username, password) VALUES (?, ?)", ("alice", ph.hash("alice123")))
     conn.execute("INSERT INTO users (username, password) VALUES (?, ?)", ("bob", ph.hash("bob123")))
     conn.executemany("INSERT INTO products (name, price) VALUES (?, ?)",
