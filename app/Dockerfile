@@ -1,5 +1,5 @@
 # Pinned base image: a precise, slim tag instead of the floating "latest" tag
-FROM python:3.12-slim
+FROM python:3.15-slim
 
 # No .pyc files, unbuffered logs, production mode by default
 ENV PYTHONDONTWRITEBYTECODE=1 \
